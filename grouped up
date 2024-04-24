@@ -1,0 +1,115 @@
+import smtplib
+import imaplib
+import email
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime
+import socket
+import threading
+
+# Constants for email settings
+EMAIL_ADDRESS = 'your_email@example.com'
+EMAIL_PASSWORD = 'your_email_password'
+IMAP_SERVER = 'imap.example.com'
+IMAP_PORT = 993
+SMTP_SERVER = 'smtp.example.com'
+SMTP_PORT = 587
+
+# Constants for Google Sheets API
+SCOPE = ['https://spreadsheets.google.com/feeds',
+         'https://www.googleapis.com/auth/drive']
+SPREADSHEET_KEY = 'your_spreadsheet_key'
+GOOGLE_SERVICE_ACCOUNT_FILE = 'service_account.json'
+
+# Constants for chat system
+HOST = '127.0.0.1'  # localhost
+PORT = 12345  # Choose any available port
+BUFFER_SIZE = 1024
+
+class EmailClient:
+    def __init__(self):
+        self.smtp = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        self.smtp.starttls()
+        self.smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+        self.imap = imaplib.IMAP4_SSL(IMAP_SERVER, IMAP_PORT)
+        self.imap.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+    
+    def send_email(self, to_address, subject, message):
+        msg = f"Subject: {subject}\n\n{message}"
+        self.smtp.sendmail(EMAIL_ADDRESS, to_address, msg)
+
+    def receive_emails(self):
+        self.imap.select('inbox')
+        typ, data = self.imap.search(None, 'ALL')
+        for num in data[0].split():
+            typ, data = self.imap.fetch(num, '(RFC822)')
+            msg = email.message_from_bytes(data[0][1])
+            print('From:', msg['From'])
+            print('Subject:', msg['Subject'])
+            print('Date:', msg['Date'])
+            print(msg.get_payload(decode=True))
+
+class SpreadsheetClient:
+    def __init__(self):
+        credentials = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SERVICE_ACCOUNT_FILE, SCOPE)
+        self.gc = gspread.authorize(credentials)
+        self.sheet = self.gc.open_by_key(SPREADSHEET_KEY).sheet1
+    
+    def update_spreadsheet(self, data):
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        row = [timestamp] + data
+        self.sheet.append_row(row)
+        print("Spreadsheet updated successfully.")
+
+class ChatServer:
+    def __init__(self):
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.bind((HOST, PORT))
+        self.server_socket.listen(1)
+        print(f"Chat server is running on {HOST}:{PORT}")
+
+    def handle_client(self, client_socket):
+        while True:
+            data = client_socket.recv(BUFFER_SIZE)
+            if not data:
+                break
+            print("Received:", data.decode())
+            client_socket.sendall(b"Message received.")
+        client_socket.close()
+
+    def start(self):
+        while True:
+            client_socket, addr = self.server_socket.accept()
+            print(f"Connected to {addr[0]}:{addr[1]}")
+            client_handler = threading.Thread(target=self.handle_client, args=(client_socket,))
+            client_handler.start()
+
+class CalendarClient:
+    def __init__(self):
+        pass  # Implement calendar functionality here
+
+class CustomerProfileManager:
+    def __init__(self):
+        pass  # Implement customer profile management functionality here
+
+if __name__ == "__main__":
+    email_client = EmailClient()
+    spreadsheet_client = SpreadsheetClient()
+    chat_server = ChatServer()
+
+    while True:
+        choice = input("Choose an option: (1) Send Email (2) Update Spreadsheet (3) Start Chat Server (4) Exit\n")
+        if choice == "1":
+            to_address = input("Enter recipient's email address: ")
+            subject = input("Enter email subject: ")
+            message = input("Enter email message: ")
+            email_client.send_email(to_address, subject, message)
+        elif choice == "2":
+            data = input("Enter data to update spreadsheet (comma separated): ").split(',')
+            spreadsheet_client.update_spreadsheet(data)
+        elif choice == "3":
+            chat_server.start()
+        elif choice == "4":
+            break
+        else:
+            print("Invalid choice. Please try again.")
